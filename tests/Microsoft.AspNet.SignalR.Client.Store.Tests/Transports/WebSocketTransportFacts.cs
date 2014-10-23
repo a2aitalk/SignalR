@@ -402,5 +402,34 @@ namespace Microsoft.AspNet.SignalR.Client.Transports
                 Assert.Throws<ArgumentNullException>(
                     () => new WebSocketTransport().LostConnection(null)).ParamName);
         }
+
+        [Fact]
+        public void ExceptionCaughtAndReportedIfThrownWhenReading()
+        {
+            var exception = new Exception();
+            var fakeDataReader = new FakeDataReader
+            {
+                UnicodeEncoding = (UnicodeEncoding)(-1),
+                UnconsumedBufferLength = 42
+            };
+
+            fakeDataReader.Setup<string>("ReadString", () => { throw exception; });
+
+            var fakeWebSocketResponse = new FakeWebSocketResponse();
+            fakeWebSocketResponse.Setup("GetDataReader", () => fakeDataReader);
+
+            var transport = new WebSocketTransport();
+            transport.Start(
+                new FakeConnection
+                {
+                    TransportConnectTimeout = new TimeSpan(0, 0, 0, 0, 100)
+                },
+                string.Empty, CancellationToken.None);
+
+            var fakeConnection = new FakeConnection();
+            transport.MessageReceived(fakeWebSocketResponse, fakeConnection);
+
+            fakeConnection.Verify("OnError", new List<object[]> { new object[] { exception } });
+        }
     }
 }
